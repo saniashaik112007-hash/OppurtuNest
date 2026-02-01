@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   GraduationCap, 
   Briefcase, 
@@ -12,125 +12,113 @@ import {
   Award,
   User,
   Sparkles,
-  FileText
+  FileText,
+  LogOut,
+  Home
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from '@/app/components/ui/sidebar';
+import { collection, query, onSnapshot, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import { SeedDataButton } from './SeedDataButton';
 
-interface StudentProfile {
-  fullName: string;
-  email: string;
-  course: string;
-  branch: string;
-  collegeName: string;
-  collegeLocation: string;
+interface DashboardStats {
+  totalOpportunities: number;
+  totalCourses: number;
+  completedQuizzes: number;
+  assignmentsSubmitted: number;
+  currentRank: number;
+  totalPoints: number;
 }
 
-const sections = [
+const menuItems = [
+  {
+    title: 'Main',
+    items: [
+      {
+        title: 'Dashboard',
+        icon: Home,
+        url: '/dashboard',
+      },
+    ],
+  },
   {
     title: 'Career Opportunities',
-    description: 'Explore internships, hackathons, and events',
-    cards: [
+    items: [
       {
-        id: 'internships',
         title: 'Internships',
-        description: 'Find internships at top companies',
         icon: Briefcase,
-        color: 'from-blue-500 to-blue-600',
-        bgColor: 'bg-blue-50',
-        textColor: 'text-blue-600',
+        url: '/internships',
       },
       {
-        id: 'hackathons',
         title: 'Hackathons',
-        description: 'Compete and showcase your skills',
         icon: Trophy,
-        color: 'from-purple-500 to-purple-600',
-        bgColor: 'bg-purple-50',
-        textColor: 'text-purple-600',
+        url: '/hackathons',
       },
       {
-        id: 'workshops',
         title: 'Workshops',
-        description: 'Hands-on learning experiences',
         icon: Sparkles,
-        color: 'from-pink-500 to-pink-600',
-        bgColor: 'bg-pink-50',
-        textColor: 'text-pink-600',
+        url: '/workshops',
       },
       {
-        id: 'events',
         title: 'Events',
-        description: 'Conferences, seminars & meetups',
         icon: Calendar,
-        color: 'from-orange-500 to-orange-600',
-        bgColor: 'bg-orange-50',
-        textColor: 'text-orange-600',
+        url: '/events',
       },
     ],
   },
   {
     title: 'Learning Hub',
-    description: 'Access courses, subjects, and study materials',
-    cards: [
+    items: [
       {
-        id: 'courses',
         title: 'Courses',
-        description: 'B.Tech, Pharmacy & more',
         icon: BookOpen,
-        color: 'from-green-500 to-green-600',
-        bgColor: 'bg-green-50',
-        textColor: 'text-green-600',
+        url: '/courses',
       },
       {
-        id: 'subjects',
         title: 'Subject PDFs',
-        description: 'All semesters (1-1 to 4-1)',
         icon: FileText,
-        color: 'from-teal-500 to-teal-600',
-        bgColor: 'bg-teal-50',
-        textColor: 'text-teal-600',
+        url: '/subjects',
       },
     ],
   },
   {
     title: 'Practice & Progress',
-    description: 'Track your learning and compete with peers',
-    cards: [
+    items: [
       {
-        id: 'quizzes',
         title: 'Quiz Games',
-        description: 'Test your knowledge & have fun',
         icon: Brain,
-        color: 'from-indigo-500 to-indigo-600',
-        bgColor: 'bg-indigo-50',
-        textColor: 'text-indigo-600',
+        url: '/quizzes',
       },
       {
-        id: 'assignments',
-        title: 'Weekly Assignments',
-        description: 'Practice problems for your course',
+        title: 'Assignments',
         icon: ClipboardList,
-        color: 'from-cyan-500 to-cyan-600',
-        bgColor: 'bg-cyan-50',
-        textColor: 'text-cyan-600',
+        url: '/assignments',
       },
       {
-        id: 'progress',
         title: 'Progress Tracker',
-        description: 'Monitor your learning journey',
         icon: TrendingUp,
-        color: 'from-emerald-500 to-emerald-600',
-        bgColor: 'bg-emerald-50',
-        textColor: 'text-emerald-600',
+        url: '/progress',
       },
       {
-        id: 'leaderboard',
         title: 'Leaderboard',
-        description: 'See your rank & compete',
         icon: Award,
-        color: 'from-amber-500 to-amber-600',
-        bgColor: 'bg-amber-50',
-        textColor: 'text-amber-600',
+        url: '/leaderboard',
       },
     ],
   },
@@ -138,104 +126,364 @@ const sections = [
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const location = useLocation();
+  const { currentUser, userProfile, logout, loading } = useAuth();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalOpportunities: 0,
+    totalCourses: 0,
+    completedQuizzes: 0,
+    assignmentsSubmitted: 0,
+    currentRank: 0,
+    totalPoints: 0,
+  });
+  const [realtimeData, setRealtimeData] = useState<any>(null);
 
   useEffect(() => {
-    const savedProfile = localStorage.getItem('studentProfile');
-    if (savedProfile) {
-      setProfile(JSON.parse(savedProfile));
-    } else {
-      navigate('/');
+    if (!loading && !currentUser) {
+      navigate('/login');
     }
-  }, [navigate]);
+  }, [currentUser, loading, navigate]);
 
-  const handleCardClick = (cardId: string) => {
-    navigate(`/${cardId}`);
+  // Real-time data fetching from Firebase
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Fetch opportunities count
+    const opportunitiesQuery = query(collection(db, 'opportunities'));
+    const unsubscribeOpportunities = onSnapshot(
+      opportunitiesQuery,
+      (snapshot) => {
+        setStats((prev) => ({
+          ...prev,
+          totalOpportunities: snapshot.size,
+        }));
+      },
+      (error) => {
+        console.error('Error fetching opportunities:', error);
+      }
+    );
+
+    // Fetch courses count
+    const coursesQuery = query(collection(db, 'courses'));
+    const unsubscribeCourses = onSnapshot(
+      coursesQuery,
+      (snapshot) => {
+        setStats((prev) => ({
+          ...prev,
+          totalCourses: snapshot.size,
+        }));
+      },
+      (error) => {
+        console.error('Error fetching courses:', error);
+      }
+    );
+
+    // Fetch user progress data
+    if (currentUser) {
+      const userProgressQuery = query(
+        collection(db, 'userProgress'),
+        where('userId', '==', currentUser.uid)
+      );
+      const unsubscribeProgress = onSnapshot(
+        userProgressQuery,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const progressData = snapshot.docs[0].data();
+            setStats((prev) => ({
+              ...prev,
+              completedQuizzes: progressData.completedQuizzes || 0,
+              assignmentsSubmitted: progressData.assignmentsSubmitted || 0,
+              totalPoints: progressData.totalPoints || 0,
+            }));
+            setRealtimeData(progressData);
+          }
+        },
+        (error) => {
+          console.error('Error fetching user progress:', error);
+        }
+      );
+
+      // Fetch leaderboard rank
+      const leaderboardQuery = query(collection(db, 'leaderboard'));
+      const unsubscribeLeaderboard = onSnapshot(
+        leaderboardQuery,
+        async (snapshot) => {
+          const leaderboard = snapshot.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .sort((a: any, b: any) => (b.totalPoints || 0) - (a.totalPoints || 0));
+          
+          const userIndex = leaderboard.findIndex((entry: any) => entry.userId === currentUser.uid);
+          setStats((prev) => ({
+            ...prev,
+            currentRank: userIndex >= 0 ? userIndex + 1 : 0,
+          }));
+        },
+        (error) => {
+          console.error('Error fetching leaderboard:', error);
+        }
+      );
+
+      return () => {
+        unsubscribeOpportunities();
+        unsubscribeCourses();
+        unsubscribeProgress();
+        unsubscribeLeaderboard();
+      };
+    }
+
+    return () => {
+      unsubscribeOpportunities();
+      unsubscribeCourses();
+    };
+  }, [currentUser]);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
-  if (!profile) {
-    return null;
+  if (loading || !currentUser || !userProfile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-white">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full">
+        {/* Sidebar */}
+        <Sidebar>
+          <SidebarHeader className="border-b border-gray-200">
+            <div className="flex items-center gap-3 px-4 py-4">
               <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-xl">
                 <GraduationCap className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                   Opportunest
                 </h1>
-                <p className="text-xs text-gray-500">{profile.collegeName}</p>
+                <p className="text-xs text-gray-500">{userProfile.collegeName}</p>
+              </div>
+            </div>
+          </SidebarHeader>
+
+          <SidebarContent>
+            {menuItems.map((group, groupIndex) => (
+              <SidebarGroup key={groupIndex}>
+                <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = location.pathname === item.url;
+                      return (
+                        <SidebarMenuItem key={item.url}>
+                          <SidebarMenuButton
+                            onClick={() => navigate(item.url)}
+                            isActive={isActive}
+                            tooltip={item.title}
+                          >
+                            <Icon className="w-4 h-4" />
+                            <span>{item.title}</span>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ))}
+          </SidebarContent>
+
+          <SidebarFooter className="border-t border-gray-200 p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
+                <User className="w-4 h-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">
+                  {userProfile.fullName}
+                </p>
+                <p className="text-xs text-gray-500 truncate">{userProfile.email}</p>
               </div>
             </div>
             <Button
               variant="outline"
-              className="flex items-center gap-2 rounded-full"
-              onClick={() => navigate('/')}
+              className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+              onClick={handleLogout}
             >
-              <User className="w-4 h-4" />
-              <span className="hidden sm:inline">{profile.fullName}</span>
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
             </Button>
-          </div>
-        </div>
-      </header>
+          </SidebarFooter>
+        </Sidebar>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Welcome Section */}
-        <div className="mb-10">
-          <h2 className="text-4xl font-bold text-gray-800 mb-2">
-            Welcome back, {profile.fullName.split(' ')[0]}! 👋
-          </h2>
-          <p className="text-lg text-gray-600">
-            {profile.course} - {profile.branch}
-          </p>
-        </div>
-
-        {/* Sections */}
-        {sections.map((section, sectionIndex) => (
-          <div key={sectionIndex} className="mb-12">
-            <div className="mb-6">
-              <h3 className="text-2xl font-bold text-gray-800 mb-1">{section.title}</h3>
-              <p className="text-gray-600">{section.description}</p>
+        {/* Main Content */}
+        <main className="flex-1 flex flex-col">
+          {/* Header */}
+          <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
+            <div className="flex items-center justify-between px-6 py-4">
+              <div className="flex items-center gap-4">
+                <SidebarTrigger />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">
+                    Welcome back, {userProfile.fullName.split(' ')[0]}! 👋
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    {userProfile.course} - {userProfile.branch}
+                  </p>
+                </div>
+              </div>
+              <SeedDataButton />
             </div>
+          </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              {section.cards.map((card) => {
-                const Icon = card.icon;
-                return (
-                  <button
-                    key={card.id}
-                    onClick={() => handleCardClick(card.id)}
-                    className="group relative bg-white rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 text-left"
-                  >
-                    <div className={`${card.bgColor} w-14 h-14 rounded-xl flex items-center justify-center mb-4`}>
-                      <Icon className={`w-7 h-7 ${card.textColor}`} />
-                    </div>
-                    
-                    <h4 className="text-lg font-bold text-gray-800 mb-2">
-                      {card.title}
-                    </h4>
-                    
-                    <p className="text-sm text-gray-600">
-                      {card.description}
+          {/* Dashboard Content */}
+          <div className="flex-1 bg-gradient-to-br from-blue-50 via-purple-50 to-white p-6">
+            <div className="max-w-7xl mx-auto">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Opportunities</CardTitle>
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalOpportunities}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Available internships, hackathons & events
                     </p>
+                  </CardContent>
+                </Card>
 
-                    {/* Gradient border effect on hover */}
-                    <div className={`absolute inset-0 rounded-2xl bg-gradient-to-r ${card.color} opacity-0 group-hover:opacity-10 transition-opacity -z-10`}></div>
-                  </button>
-                );
-              })}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Available Courses</CardTitle>
+                    <BookOpen className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalCourses}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Courses ready for you to explore
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Completed Quizzes</CardTitle>
+                    <Brain className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats.completedQuizzes}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Quizzes you've completed
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Assignments Submitted</CardTitle>
+                    <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats.assignmentsSubmitted}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Assignments you've completed
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Your Rank</CardTitle>
+                    <Award className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {stats.currentRank > 0 ? `#${stats.currentRank}` : 'N/A'}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Your position on the leaderboard
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Points</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalPoints}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Points earned from activities
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="mb-8">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Quick Actions</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {menuItems
+                    .flatMap((group) => group.items)
+                    .filter((item) => item.url !== '/dashboard')
+                    .slice(0, 8)
+                    .map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Card
+                          key={item.url}
+                          className="cursor-pointer hover:shadow-lg transition-shadow"
+                          onClick={() => navigate(item.url)}
+                        >
+                          <CardHeader>
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-blue-50 rounded-lg">
+                                <Icon className="w-5 h-5 text-blue-600" />
+                              </div>
+                              <CardTitle className="text-base">{item.title}</CardTitle>
+                            </div>
+                          </CardHeader>
+                        </Card>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Real-time Data Info */}
+              {realtimeData && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Real-time Updates</CardTitle>
+                    <CardDescription>
+                      Your data is being updated in real-time from Firebase
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2 text-sm text-green-600">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span>Connected to Firebase - Data syncing live</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
-        ))}
-      </main>
-    </div>
+        </main>
+      </div>
+    </SidebarProvider>
   );
 }

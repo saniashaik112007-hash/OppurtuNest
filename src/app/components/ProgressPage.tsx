@@ -1,42 +1,77 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, ArrowLeft, TrendingUp, BookOpen, Brain, CheckCircle, Clock } from 'lucide-react';
+import { GraduationCap, ArrowLeft, TrendingUp, BookOpen, Brain, CheckCircle, Clock, Trophy } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Progress } from '@/app/components/ui/progress';
+import { collection, query, onSnapshot, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
+import { SeedDataButton } from './SeedDataButton';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 
-interface CourseProgress {
-  subject: string;
-  semester: string;
-  completed: number;
-  total: number;
-  status: 'In Progress' | 'Completed' | 'Not Started';
+interface UserProgress {
+  userId: string;
+  completedQuizzes: number;
+  assignmentsSubmitted: number;
+  totalPoints: number;
+  coursesCompleted: number;
+  lastActivity?: any;
 }
-
-const progressData: CourseProgress[] = [
-  { subject: 'Data Structures', semester: '1-2', completed: 12, total: 15, status: 'In Progress' },
-  { subject: 'Database Management Systems', semester: '2-1', completed: 10, total: 10, status: 'Completed' },
-  { subject: 'Operating Systems', semester: '2-1', completed: 8, total: 12, status: 'In Progress' },
-  { subject: 'Computer Networks', semester: '2-1', completed: 5, total: 14, status: 'In Progress' },
-  { subject: 'Web Technologies', semester: '2-2', completed: 15, total: 15, status: 'Completed' },
-  { subject: 'Machine Learning', semester: '3-1', completed: 0, total: 16, status: 'Not Started' },
-];
-
-const activityLog = [
-  { activity: 'Completed Quiz: Data Structures Fundamentals', time: '2 hours ago', type: 'quiz' },
-  { activity: 'Downloaded PDF: Operating Systems Chapter 3', time: '5 hours ago', type: 'study' },
-  { activity: 'Submitted Assignment: DBMS Week 5', time: '1 day ago', type: 'assignment' },
-  { activity: 'Completed Quiz: Web Development Basics', time: '2 days ago', type: 'quiz' },
-  { activity: 'Downloaded PDF: Computer Networks Chapter 2', time: '3 days ago', type: 'study' },
-];
 
 export function ProgressPage() {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+  const [progress, setProgress] = useState<UserProgress | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const totalCompleted = progressData.reduce((sum, item) => sum + item.completed, 0);
-  const totalLessons = progressData.reduce((sum, item) => sum + item.total, 0);
-  const overallProgress = Math.round((totalCompleted / totalLessons) * 100);
+  // Real-time data fetching from Firebase
+  useEffect(() => {
+    if (!currentUser) return;
 
-  const completedCourses = progressData.filter(c => c.status === 'Completed').length;
-  const inProgressCourses = progressData.filter(c => c.status === 'In Progress').length;
+    setLoading(true);
+    const progressQuery = query(
+      collection(db, 'userProgress'),
+      where('userId', '==', currentUser.uid)
+    );
+
+    const unsubscribe = onSnapshot(
+      progressQuery,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const progressData = snapshot.docs[0].data() as UserProgress;
+          setProgress(progressData);
+        } else {
+          setProgress({
+            userId: currentUser.uid,
+            completedQuizzes: 0,
+            assignmentsSubmitted: 0,
+            totalPoints: 0,
+            coursesCompleted: 0,
+          });
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching progress:', error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading progress...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const overallProgress = progress ? Math.min(100, Math.round((progress.totalPoints / 5000) * 100)) : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-white">
@@ -52,144 +87,118 @@ export function ProgressPage() {
                 Opportunest
               </h1>
             </div>
-            <Button
-              variant="outline"
-              className="flex items-center gap-2 rounded-full"
-              onClick={() => navigate('/dashboard')}
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Dashboard
-            </Button>
+            <div className="flex items-center gap-3">
+              <SeedDataButton />
+              <Button
+                variant="outline"
+                className="flex items-center gap-2 rounded-full"
+                onClick={() => navigate('/dashboard')}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Dashboard
+              </Button>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-12">
-        {/* Page Header */}
         <div className="mb-10">
-          <div className="flex items-center gap-4 mb-3">
-            <div className="bg-emerald-50 w-14 h-14 rounded-2xl flex items-center justify-center">
-              <TrendingUp className="w-7 h-7 text-emerald-600" />
-            </div>
-            <div>
-              <h2 className="text-4xl font-bold text-gray-800">Progress Tracker</h2>
-              <p className="text-gray-600 mt-1">Monitor your learning journey</p>
-            </div>
-          </div>
+          <h2 className="text-4xl font-bold text-gray-800 mb-2">Progress Tracker</h2>
+          <p className="text-lg text-gray-600">Monitor your learning journey and achievements</p>
         </div>
 
-        {/* Overall Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-white rounded-3xl p-8 shadow-lg">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="bg-emerald-50 w-12 h-12 rounded-xl flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-emerald-600" />
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-gray-800">{overallProgress}%</div>
-                <div className="text-sm text-gray-600">Overall Progress</div>
-              </div>
-            </div>
-            <Progress value={overallProgress} className="h-2" />
-          </div>
-
-          <div className="bg-white rounded-3xl p-8 shadow-lg">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="bg-blue-50 w-12 h-12 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-gray-800">{completedCourses}</div>
-                <div className="text-sm text-gray-600">Courses Completed</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-3xl p-8 shadow-lg">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="bg-orange-50 w-12 h-12 rounded-xl flex items-center justify-center">
-                <Clock className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-gray-800">{inProgressCourses}</div>
-                <div className="text-sm text-gray-600">In Progress</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Course Progress */}
-          <div className="lg:col-span-2">
-            <h3 className="text-2xl font-bold text-gray-800 mb-6">Course Progress</h3>
+        {/* Overall Progress */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Overall Progress
+            </CardTitle>
+            <CardDescription>Your overall learning progress</CardDescription>
+          </CardHeader>
+          <CardContent>
             <div className="space-y-4">
-              {progressData.map((course, index) => {
-                const progressPercent = Math.round((course.completed / course.total) * 100);
-                const statusColors = {
-                  'Completed': 'bg-green-100 text-green-700',
-                  'In Progress': 'bg-blue-100 text-blue-700',
-                  'Not Started': 'bg-gray-100 text-gray-700',
-                };
-
-                return (
-                  <div key={index} className="bg-white rounded-2xl p-6 shadow-md">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-emerald-50 w-10 h-10 rounded-lg flex items-center justify-center">
-                          <BookOpen className="w-5 h-5 text-emerald-600" />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-gray-800 text-lg">{course.subject}</h4>
-                          <p className="text-sm text-gray-600">Semester {course.semester}</p>
-                        </div>
-                      </div>
-                      <span className={`${statusColors[course.status]} px-3 py-1 rounded-full text-xs font-semibold`}>
-                        {course.status}
-                      </span>
-                    </div>
-
-                    <div className="mb-2">
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-gray-600">Lessons: {course.completed} / {course.total}</span>
-                        <span className="font-semibold text-emerald-600">{progressPercent}%</span>
-                      </div>
-                      <Progress value={progressPercent} className="h-2" />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Activity Log */}
-          <div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-6">Recent Activity</h3>
-            <div className="bg-white rounded-3xl p-6 shadow-lg">
-              <div className="space-y-4">
-                {activityLog.map((log, index) => {
-                  const icons = {
-                    quiz: <Brain className="w-5 h-5 text-indigo-600" />,
-                    study: <BookOpen className="w-5 h-5 text-blue-600" />,
-                    assignment: <CheckCircle className="w-5 h-5 text-green-600" />,
-                  };
-
-                  return (
-                    <div key={index} className="flex gap-3 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
-                      <div className="bg-gray-50 w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0">
-                        {icons[log.type as keyof typeof icons]}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-800">{log.activity}</p>
-                        <p className="text-xs text-gray-500 mt-1">{log.time}</p>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-sm font-medium">Total Points</span>
+                  <span className="text-sm font-bold">{progress?.totalPoints || 0} / 5000</span>
+                </div>
+                <Progress value={overallProgress} className="h-3" />
               </div>
             </div>
-          </div>
+          </CardContent>
+        </Card>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Brain className="w-5 h-5 text-indigo-600" />
+                Quizzes Completed
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-indigo-600">
+                {progress?.completedQuizzes || 0}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                Assignments Submitted
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-600">
+                {progress?.assignmentsSubmitted || 0}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-amber-600" />
+                Total Points
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-amber-600">
+                {progress?.totalPoints || 0}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-blue-600" />
+                Courses Completed
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-blue-600">
+                {progress?.coursesCompleted || 0}
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Real-time Indicator */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-sm text-green-600">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span>Connected to Firebase - Progress updates in real-time</span>
+            </div>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

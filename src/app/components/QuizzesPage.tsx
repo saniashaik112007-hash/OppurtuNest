@@ -1,96 +1,66 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, ArrowLeft, Brain, Play, Trophy, Clock } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { SeedDataButton } from './SeedDataButton';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 
 interface Quiz {
   id: string;
   title: string;
   description: string;
-  subject: string;
+  category?: string;
   questions: number;
-  duration: number;
-  difficulty: 'Easy' | 'Medium' | 'Hard';
+  timeLimit: number;
+  difficulty?: string;
   points: number;
 }
 
-const quizzes: Quiz[] = [
-  {
-    id: '1',
-    title: 'Data Structures Fundamentals',
-    description: 'Test your knowledge on arrays, linked lists, stacks, and queues',
-    subject: 'Data Structures',
-    questions: 15,
-    duration: 20,
-    difficulty: 'Easy',
-    points: 100,
-  },
-  {
-    id: '2',
-    title: 'Database Management Pro',
-    description: 'Advanced SQL queries, normalization, and transactions',
-    subject: 'DBMS',
-    questions: 20,
-    duration: 30,
-    difficulty: 'Hard',
-    points: 200,
-  },
-  {
-    id: '3',
-    title: 'Web Development Basics',
-    description: 'HTML, CSS, JavaScript fundamentals quiz',
-    subject: 'Web Technologies',
-    questions: 12,
-    duration: 15,
-    difficulty: 'Easy',
-    points: 80,
-  },
-  {
-    id: '4',
-    title: 'Operating Systems Challenge',
-    description: 'Processes, threads, memory management, and scheduling',
-    subject: 'Operating Systems',
-    questions: 18,
-    duration: 25,
-    difficulty: 'Medium',
-    points: 150,
-  },
-  {
-    id: '5',
-    title: 'Machine Learning Quiz',
-    description: 'Algorithms, models, and ML concepts',
-    subject: 'Machine Learning',
-    questions: 20,
-    duration: 30,
-    difficulty: 'Hard',
-    points: 200,
-  },
-  {
-    id: '6',
-    title: 'Computer Networks Essentials',
-    description: 'Protocols, OSI model, and network security',
-    subject: 'Computer Networks',
-    questions: 15,
-    duration: 20,
-    difficulty: 'Medium',
-    points: 120,
-  },
-];
-
-const difficultyColors = {
-  Easy: { bg: 'bg-green-100', text: 'text-green-700' },
-  Medium: { bg: 'bg-orange-100', text: 'text-orange-700' },
-  Hard: { bg: 'bg-red-100', text: 'text-red-700' },
-};
-
 export function QuizzesPage() {
   const navigate = useNavigate();
-  const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleStartQuiz = (quiz: Quiz) => {
-    setSelectedQuiz(quiz);
-    // In a real app, this would navigate to the quiz taking page
-    alert(`Starting ${quiz.title}! Good luck! 🎯`);
+  // Real-time data fetching from Firebase
+  useEffect(() => {
+    setLoading(true);
+    const unsubscribe = onSnapshot(
+      collection(db, 'quizzes'),
+      (snapshot) => {
+        const quizzesData = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Quiz[];
+        setQuizzes(quizzesData);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching quizzes:', error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  const getDifficultyColor = (difficulty?: string) => {
+    switch (difficulty?.toLowerCase()) {
+      case 'easy':
+        return 'bg-green-100 text-green-700';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-700';
+      case 'hard':
+        return 'bg-red-100 text-red-700';
+      default:
+        return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const handleStartQuiz = (quizId: string) => {
+    // Navigate to quiz taking page
+    navigate(`/quiz/${quizId}`);
   };
 
   return (
@@ -107,130 +77,101 @@ export function QuizzesPage() {
                 Opportunest
               </h1>
             </div>
-            <Button
-              variant="outline"
-              className="flex items-center gap-2 rounded-full"
-              onClick={() => navigate('/dashboard')}
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Dashboard
-            </Button>
+            <div className="flex items-center gap-3">
+              <SeedDataButton />
+              <Button
+                variant="outline"
+                className="flex items-center gap-2 rounded-full"
+                onClick={() => navigate('/dashboard')}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Dashboard
+              </Button>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-12">
-        {/* Page Header */}
         <div className="mb-10">
-          <div className="flex items-center gap-4 mb-3">
-            <div className="bg-indigo-50 w-14 h-14 rounded-2xl flex items-center justify-center">
-              <Brain className="w-7 h-7 text-indigo-600" />
-            </div>
-            <div>
-              <h2 className="text-4xl font-bold text-gray-800">Quiz Games</h2>
-              <p className="text-gray-600 mt-1">Test your knowledge and earn points</p>
-            </div>
-          </div>
+          <h2 className="text-4xl font-bold text-gray-800 mb-2">Quiz Games</h2>
+          <p className="text-lg text-gray-600">
+            {loading ? 'Loading...' : `Test your knowledge with ${quizzes.length} quizzes`}
+          </p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-white rounded-2xl p-6 shadow-md">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="bg-blue-50 w-10 h-10 rounded-lg flex items-center justify-center">
-                <Brain className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-800">24</div>
-                <div className="text-sm text-gray-600">Quizzes Completed</div>
-              </div>
-            </div>
+        {loading ? (
+          <div className="text-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading quizzes...</p>
           </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-md">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="bg-green-50 w-10 h-10 rounded-lg flex items-center justify-center">
-                <Trophy className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-800">1,840</div>
-                <div className="text-sm text-gray-600">Total Points</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-md">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="bg-purple-50 w-10 h-10 rounded-lg flex items-center justify-center">
-                <Trophy className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-800">85%</div>
-                <div className="text-sm text-gray-600">Average Score</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Quizzes Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {quizzes.map((quiz) => {
-            const difficultyColor = difficultyColors[quiz.difficulty];
-            return (
-              <div
-                key={quiz.id}
-                className="bg-white rounded-3xl p-8 shadow-lg hover:shadow-xl transition-all duration-300"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="bg-indigo-50 w-14 h-14 rounded-2xl flex items-center justify-center">
-                    <Brain className="w-7 h-7 text-indigo-600" />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {quizzes.map((quiz) => (
+              <Card key={quiz.id} className="hover:shadow-xl transition-shadow">
+                <CardHeader>
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="bg-indigo-100 p-3 rounded-xl">
+                      <Brain className="w-6 h-6 text-indigo-600" />
+                    </div>
+                    {quiz.difficulty && (
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getDifficultyColor(quiz.difficulty)}`}>
+                        {quiz.difficulty}
+                      </span>
+                    )}
                   </div>
-                  <span className={`${difficultyColor.bg} ${difficultyColor.text} px-3 py-1 rounded-full text-sm font-semibold`}>
-                    {quiz.difficulty}
-                  </span>
-                </div>
-
-                <h3 className="text-2xl font-bold text-gray-800 mb-2">
-                  {quiz.title}
-                </h3>
-
-                <p className="text-gray-600 mb-4">
-                  {quiz.description}
-                </p>
-
-                <div className="bg-gray-50 rounded-xl p-4 mb-5">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-500">Subject:</span>
-                      <div className="font-semibold text-gray-800">{quiz.subject}</div>
+                  <CardTitle className="text-xl">{quiz.title}</CardTitle>
+                  <CardDescription>{quiz.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 mb-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Questions</span>
+                      <span className="font-semibold">{quiz.questions}</span>
                     </div>
-                    <div>
-                      <span className="text-gray-500">Points:</span>
-                      <div className="font-semibold text-indigo-600">{quiz.points}</div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        Time Limit
+                      </span>
+                      <span className="font-semibold">{quiz.timeLimit} min</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Brain className="w-4 h-4 text-gray-500" />
-                      <span className="text-gray-700">{quiz.questions} Questions</span>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 flex items-center gap-1">
+                        <Trophy className="w-4 h-4" />
+                        Points
+                      </span>
+                      <span className="font-semibold text-indigo-600">{quiz.points}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-gray-500" />
-                      <span className="text-gray-700">{quiz.duration} mins</span>
-                    </div>
+                    {quiz.category && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Category</span>
+                        <span className="font-semibold">{quiz.category}</span>
+                      </div>
+                    )}
                   </div>
-                </div>
+                  <Button
+                    onClick={() => handleStartQuiz(quiz.id)}
+                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Start Quiz
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
-                <Button
-                  onClick={() => handleStartQuiz(quiz)}
-                  className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white py-6 rounded-xl font-semibold flex items-center justify-center gap-2"
-                >
-                  <Play className="w-5 h-5" />
-                  Start Quiz
-                </Button>
-              </div>
-            );
-          })}
-        </div>
+        {!loading && quizzes.length === 0 && (
+          <div className="text-center py-20">
+            <Brain className="w-20 h-20 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">No quizzes available</h3>
+            <p className="text-gray-600 mb-4">Quizzes will appear here once they're added.</p>
+            <SeedDataButton />
+          </div>
+        )}
       </main>
     </div>
   );
