@@ -12,7 +12,7 @@ interface Quiz {
   title: string;
   description: string;
   category?: string;
-  questions: number;
+  questions: number | any[]; // Can be number or array of questions
   timeLimit: number;
   difficulty?: string;
   points: number;
@@ -128,7 +128,9 @@ export function QuizzesPage() {
                   <div className="space-y-3 mb-4">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600">Questions</span>
-                      <span className="font-semibold">{quiz.questions}</span>
+                      <span className="font-semibold">
+                        {Array.isArray(quiz.questions) ? quiz.questions.length : quiz.questions}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600 flex items-center gap-1">

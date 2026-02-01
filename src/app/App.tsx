@@ -12,6 +12,7 @@ import { ProgressPage } from '@/app/components/ProgressPage';
 import { LeaderboardPage } from '@/app/components/LeaderboardPage';
 import { AssignmentsPage } from '@/app/components/AssignmentsPage';
 import { WorkshopsPage } from '@/app/components/WorkshopsPage';
+import { QuizPage } from '@/app/components/QuizPage';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 // Component to handle root route redirect
@@ -116,6 +117,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <QuizzesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/quiz/:quizId"
+        element={
+          <ProtectedRoute>
+            <QuizPage />
           </ProtectedRoute>
         }
       />
